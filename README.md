@@ -1,6 +1,10 @@
 # uniwidth - Modern Unicode Width Calculation for Go
 
 [![Go Version](https://img.shields.io/badge/Go-1.25%2B-blue)](https://go.dev/dl/)
+[![CI Status](https://github.com/unilibs/uniwidth/actions/workflows/ci.yml/badge.svg)](https://github.com/unilibs/uniwidth/actions)
+[![Go Report Card](https://goreportcard.com/badge/github.com/unilibs/uniwidth)](https://goreportcard.com/report/github.com/unilibs/uniwidth)
+[![Coverage](https://img.shields.io/badge/Coverage-87.1%25-brightgreen)](https://github.com/unilibs/uniwidth)
+[![Go Reference](https://pkg.go.dev/badge/github.com/unilibs/uniwidth.svg)](https://pkg.go.dev/github.com/unilibs/uniwidth)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Status](https://img.shields.io/badge/Status-Beta-orange)](https://github.com/unilibs/uniwidth)
 [![Version](https://img.shields.io/badge/Version-0.1.0--beta-orange)](CHANGELOG.md)
