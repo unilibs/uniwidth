@@ -1,0 +1,123 @@
+# golangci-lint v2 configuration for uniwidth
+# High-performance Unicode width library
+# Documentation: https://golangci-lint.run/docs/configuration/
+
+version: "2"
+
+run:
+  timeout: 5m
+  tests: true
+
+linters:
+  # Enable comprehensive set of linters
+  enable:
+    # Bug detection
+    - govet
+    - staticcheck
+    - errcheck
+    - errorlint
+    - gosec
+    - nilnil
+    - nilerr
+
+    # Code style and consistency
+    - misspell
+    - whitespace
+    - unconvert
+    - ineffassign
+
+    # Naming conventions
+    - errname
+    - revive
+
+    # Performance (CRITICAL for performance library!)
+    - prealloc
+    - bodyclose
+
+    # Code practices
+    - gocritic
+    - nolintlint
+
+    # Comments
+    - godot
+
+  settings:
+    govet:
+      enable:
+        - copylocks
+      disable:
+        - fieldalignment
+
+    misspell:
+      locale: US
+
+    revive:
+      rules:
+        - name: var-naming
+        - name: exported
+        - name: error-return
+        - name: error-naming
+        - name: errorf
+
+    gocritic:
+      enabled-tags:
+        - diagnostic
+        - style
+        - performance
+      disabled-checks:
+        - commentFormatting
+        - whyNoLint
+
+  # Exclusions (v2 structure)
+  exclusions:
+    rules:
+      # Test files: Allow style variations
+      - path: _test\.go
+        linters:
+          - gocyclo
+          - cyclop
+          - funlen
+          - errcheck
+          - gosec
+          - goconst
+          - dupl
+          - godot
+          - gocritic  # Allow commented code in tests
+          - unconvert # Allow unnecessary conversions in fuzz tests
+
+      # Generated tables: Skip all checks
+      - path: tables_generated\.go
+        linters:
+          - gocyclo
+          - cyclop
+          - funlen
+          - goconst
+          - dupl
+
+      # Documentation tables (not used, for reference only)
+      - path: tables\.go
+        linters:
+          - unused
+
+      # Tooling (cmd/generate-tables): Less strict
+      - path: cmd/generate-tables/.*\.go
+        linters:
+          - gosec
+          - godot
+          - errcheck
+          - unused      # Allow unused in tooling code
+          - nolintlint  # Allow nolint directives
+
+      # Hot path performance code: Allow complexity
+      - path: uniwidth\.go
+        linters:
+          - cyclop
+          - gocyclo
+          - funlen
+          - gocognit
+
+issues:
+  # Show all issues
+  max-issues-per-linter: 0
+  max-same-issues: 0
+  new: false
