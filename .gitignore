@@ -32,14 +32,15 @@ Thumbs.db
 # Temporary files
 *.tmp
 *.log
+tmp/
 
 # Fuzz test corpus and crashers
 testdata/fuzz/
 
 # AI Agents
-.claude
-.goco
-.goda
+.claude/
+.goco/
+.goda/
 
 # Dev docs
 docs/dev/
