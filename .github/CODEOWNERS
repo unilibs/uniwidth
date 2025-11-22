@@ -1,0 +1,49 @@
+# CODEOWNERS for uniwidth
+# https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+#
+# This file defines individuals or teams responsible for code in this repository.
+# Code owners are automatically requested for review when someone opens a pull request
+# that modifies code they own.
+
+# Default owner for everything in the repo
+* @kolkov
+
+# Core Unicode width calculation - Critical performance code
+/uniwidth.go @kolkov
+/options.go @kolkov
+/tables_generated.go @kolkov
+
+# Table generation - Unicode data processing
+/cmd/generate-tables/ @kolkov
+
+# Documentation - Keep up to date with code changes
+*.md @kolkov
+/docs/ @kolkov
+
+# GitHub configuration and CI/CD
+/.github/ @kolkov
+
+# Code quality and linting configuration
+/.golangci.yml @kolkov
+
+# Tests - Ensure coverage and reliability
+*_test.go @kolkov
+
+# Release management - Version control and changelog
+/CHANGELOG.md @kolkov
+/ROADMAP.md @kolkov
+
+# Contributing guidelines
+/CONTRIBUTING.md @kolkov
+/CODE_OF_CONDUCT.md @kolkov
+/SECURITY.md @kolkov
+
+# Go module files - Dependency management
+/go.mod @kolkov
+/go.sum @kolkov
+
+# Scripts
+/scripts/ @kolkov
+
+# Benchmarks
+/bench/ @kolkov

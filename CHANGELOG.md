@@ -19,15 +19,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Explicit SIMD optimizations for AVX-512
 - Profile-Guided Optimization (PGO) support
 
-## [0.1.0-beta] - 2025-10-18
+## [0.1.0] - 2025-11-22
 
-> ⚠️ **Beta Release**: This is a beta release. API may change based on community feedback. Use in production at your own discretion.
-
-### 🎯 Beta Goals
-- Gather community feedback on API design
-- Discover and fix edge cases
-- Validate performance in real-world scenarios
-- Refine documentation based on user questions
+**Stable Release**: First stable release after 35 days of beta testing. All known issues from beta have been resolved.
 
 ### Added
 - 🐛 **Bug Fix**: Variation selectors (U+FE0E, U+FE0F) now handled correctly
@@ -60,13 +54,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Unicode strings: Minimal impact (<1 ns/op, 1 allocation for `[]rune` conversion)
 - Still 9-23x faster than go-runewidth overall
 
-### Known Issues
-- Combining marks edge cases (U+1AD7, U+1AFF) - not in generated tables
-- Boundary issues (U+4DFF, U+303F, U+3100) - table generation edge cases
-- Surrogate pair handling (U+10000) - Linear B Syllable
-- Grapheme clusters not supported (planned for v0.2.0+)
+### Fixed (from beta)
+- ✅ Combining marks edge cases (U+1AD7, U+1AFF) - added to zero-width tables
+- ✅ Boundary issues (U+4DFF, U+303F, U+3100) - table boundaries corrected
+- ✅ Surrogate pair handling (U+10000) - Linear B Syllable now handled correctly
 
-See `docs/dev/BUGFIX_REPORT.md` for detailed bug fix analysis.
+### Known Limitations
+- Grapheme clusters not yet supported (planned for v0.2.0+)
+  - Complex emoji ZWJ sequences counted as sum of parts
+  - Single-character emoji work correctly
 
 ## [0.1.0] - 2025-10-15
 

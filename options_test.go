@@ -272,3 +272,33 @@ func BenchmarkStringWidthWithOptions(b *testing.B) {
 		}
 	})
 }
+
+// TestRuneWidthWithOptions_EmojiExtendedRanges tests additional emoji ranges
+func TestRuneWidthWithOptions_EmojiExtendedRanges(t *testing.T) {
+	tests := []struct {
+		name string
+		r    rune
+		want int
+	}{
+		// Supplemental Symbols and Pictographs (U+1F900-U+1F9FF)
+		{"Emoji Supplemental 🤗", '\U0001F917', 2},
+		{"Emoji Supplemental 🦄", '\U0001F984', 2},
+
+		// Miscellaneous Symbols (U+2600-U+26FF)
+		{"Misc Symbol ☀", '\u2600', 2},
+		{"Misc Symbol ♠", '\u2660', 2},
+
+		// Dingbats (U+2700-U+27BF)
+		{"Dingbat ✓", '\u2713', 2},
+		{"Dingbat ✈", '\u2708', 2},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := RuneWidthWithOptions(tt.r)
+			if got != tt.want {
+				t.Errorf("RuneWidthWithOptions(%U %s) = %d, want %d", tt.r, tt.name, got, tt.want)
+			}
+		})
+	}
+}

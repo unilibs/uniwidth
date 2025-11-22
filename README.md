@@ -1,9 +1,13 @@
 # uniwidth - Modern Unicode Width Calculation for Go
 
-[![Go Version](https://img.shields.io/badge/Go-1.25%2B-blue)](https://go.dev/dl/)
-[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Status](https://img.shields.io/badge/Status-Beta-orange)](https://github.com/unilibs/uniwidth)
-[![Version](https://img.shields.io/badge/Version-0.1.0--beta-orange)](CHANGELOG.md)
+[![Go Version](https://img.shields.io/github/go-mod/go-version/unilibs/uniwidth?label=Go)](https://go.dev/dl/)
+[![CI Status](https://github.com/unilibs/uniwidth/actions/workflows/ci.yml/badge.svg)](https://github.com/unilibs/uniwidth/actions)
+[![Go Report Card](https://goreportcard.com/badge/github.com/unilibs/uniwidth)](https://goreportcard.com/report/github.com/unilibs/uniwidth)
+[![codecov](https://codecov.io/gh/unilibs/uniwidth/branch/main/graph/badge.svg)](https://codecov.io/gh/unilibs/uniwidth)
+[![Go Reference](https://pkg.go.dev/badge/github.com/unilibs/uniwidth.svg)](https://pkg.go.dev/github.com/unilibs/uniwidth)
+[![License](https://img.shields.io/github/license/unilibs/uniwidth)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/unilibs/uniwidth)](https://github.com/unilibs/uniwidth/releases)
+[![Stars](https://img.shields.io/github/stars/unilibs/uniwidth?style=social)](https://github.com/unilibs/uniwidth/stargazers)
 
 **uniwidth** is a modern, high-performance Unicode width calculation library for Go 1.25+. It provides **3.9-46x faster** width calculation compared to existing solutions through tiered lookup optimization and Go 1.25+ compiler features.
 
@@ -220,13 +224,13 @@ go test -bench=. -benchmem
 go test -cover
 ```
 
-Current test coverage: 87.1% (target 90%+ for RC)
+Current test coverage: **90.3%** (exceeds 90% target ✅)
 
 ## 🚀 Development Status
 
-**Current**: v0.1.0-beta (Beta Testing Phase)
+**Current**: v0.1.0 (Stable Release)
 
-> ⚠️ **Beta Notice**: This library is in active beta testing. The API may change before v1.0.0. We encourage testing and feedback, but be prepared for potential breaking changes until we reach Release Candidate (RC) status.
+> ✅ **Stable Release**: This library has completed beta testing. The API is stable and ready for production use. Minor version updates (v0.2.x) will maintain backward compatibility.
 
 **What Beta Means**:
 - ✅ Feature-complete for core functionality

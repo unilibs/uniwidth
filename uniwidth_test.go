@@ -334,3 +334,33 @@ func TestIsASCIIOnly(t *testing.T) {
 		})
 	}
 }
+
+// TestRuneWidth_UncommonRanges tests coverage for less common Unicode ranges
+func TestRuneWidth_UncommonRanges(t *testing.T) {
+	tests := []struct {
+		name string
+		r    rune
+		want int
+	}{
+		// CJK Compatibility Ideographs (U+F900-U+FAFF) - Tier 2
+		{"CJK Compat 豈", '\uF900', 2},
+		{"CJK Compat 舘", '\uFAFF', 2},
+		{"CJK Compat 福", '\uFA10', 2},
+
+		// Additional emoji ranges - Tier 3
+		{"Emoji Transport 🚀", '\U0001F680', 2},
+		{"Emoji Transport 🛸", '\U0001F6FF', 2},
+		{"Emoji Misc 🔧", '\U0001F527', 2},
+		{"Emoji Supplemental 🤗", '\U0001F917', 2},
+		{"Emoji Extended 🥳", '\U0001F973', 2},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := RuneWidth(tt.r)
+			if got != tt.want {
+				t.Errorf("RuneWidth(%U %s) = %d, want %d", tt.r, tt.name, got, tt.want)
+			}
+		})
+	}
+}
