@@ -2,73 +2,137 @@
 
 Thank you for considering contributing to uniwidth! This document outlines the development workflow and guidelines.
 
-## Git Workflow (Simple Main-Based)
+## Git Workflow (Git-Flow)
 
-This project uses a simple main-based workflow for development.
+This project uses Git-Flow branching model for development.
 
 ### Branch Structure
 
 ```
 main                 # Production-ready code (tagged releases)
-  ├─ feature/*       # New features
-  └─ fix/*           # Bug fixes
+  └─ develop         # Integration branch for next release
+       ├─ feature/*  # New features
+       ├─ fix/*      # Bug fixes
+       ├─ release/*  # Release preparation
+       └─ hotfix/*   # Critical production fixes
 ```
 
 ### Branch Purposes
 
-- **main**: Production-ready code. All releases are tagged here.
-- **feature/\***: New features. Branch from `main`, merge back to `main`.
-- **fix/\***: Bug fixes. Branch from `main`, merge back to `main`.
+- **main**: Production-ready code. Only releases are merged here.
+- **develop**: Active development branch. All features merge here first.
+- **feature/\***: New features. Branch from `develop`, merge back to `develop`.
+- **fix/\***: Bug fixes. Branch from `develop`, merge back to `develop`.
+- **release/\***: Release preparation. Branch from `develop`, merge to both `main` and `develop`.
+- **hotfix/\***: Critical production fixes. Branch from `main`, merge to both `main` and `develop`.
 
 ### Workflow Commands
 
 #### Starting a New Feature
 
 ```bash
-# Create feature branch from main
-git checkout main
-git pull origin main
+# Create feature branch from develop
+git checkout develop
+git pull origin develop
 git checkout -b feature/my-new-feature
 
 # Work on your feature...
 git add .
 git commit -m "feat: add my new feature"
 
-# When done, push and create PR
-git push origin feature/my-new-feature
-# Create PR on GitHub → main
+# When done, merge back to develop
+git checkout develop
+git merge --squash feature/my-new-feature
+git commit -m "feat: my new feature"
+git branch -d feature/my-new-feature
+git push origin develop
 ```
 
 #### Fixing a Bug
 
 ```bash
-# Create fix branch from main
-git checkout main
-git pull origin main
+# Create fix branch from develop
+git checkout develop
+git pull origin develop
 git checkout -b fix/issue-123
 
 # Fix the bug...
 git add .
 git commit -m "fix: resolve issue #123"
 
-# Push and create PR
-git push origin fix/issue-123
-# Create PR on GitHub → main
+# Merge back to develop
+git checkout develop
+git merge --squash fix/issue-123
+git commit -m "fix: resolve issue #123"
+git branch -d fix/issue-123
+git push origin develop
 ```
 
 #### Creating a Release
 
 ```bash
-# Ensure main is clean and tests pass
+# 1. Create release branch from develop
+git checkout develop
+git pull origin develop
+git checkout -b release/v0.1.0
+
+# 2. Prepare release (update CHANGELOG, README, run checks)
 bash scripts/pre-release-check.sh
+git add -A
+git commit -m "chore: prepare v0.1.0 release"
 
-# Create release tag
-git tag -a v0.1.0 -m "Release v0.1.0: First Stable Release"
+# 3. Push release branch and wait for CI
+git push origin release/v0.1.0
+# ⏳ WAIT for CI to be GREEN
 
-# Push tag
-git push origin v0.1.0
+# 4. Merge to main
+git checkout main
+git merge --no-ff release/v0.1.0
+git tag -a v0.1.0 -m "Release v0.1.0"
 
-# Create GitHub Release from tag
+# 5. Merge back to develop
+git checkout develop
+git merge --no-ff release/v0.1.0
+
+# 6. Delete release branch
+git branch -d release/v0.1.0
+
+# 7. Push everything
+git push origin main develop --tags
+```
+
+#### Hotfix (Critical Production Bug)
+
+```bash
+# 1. Create hotfix branch from main
+git checkout main
+git pull origin main
+git checkout -b hotfix/critical-bug
+
+# 2. Fix the bug and prepare patch release
+# Fix the bug...
+git add .
+git commit -m "fix: critical production bug"
+
+# Update version in CHANGELOG (e.g., v0.1.0 → v0.1.1)
+bash scripts/pre-release-check.sh
+git add -A
+git commit -m "chore: prepare v0.1.1 hotfix release"
+
+# 3. Merge to main and tag
+git checkout main
+git merge --no-ff hotfix/critical-bug
+git tag -a v0.1.1 -m "Hotfix v0.1.1"
+
+# 4. Merge to develop
+git checkout develop
+git merge --no-ff hotfix/critical-bug
+
+# 5. Delete hotfix branch
+git branch -d hotfix/critical-bug
+
+# 6. Push everything
+git push origin main develop --tags
 ```
 
 ## Commit Message Guidelines

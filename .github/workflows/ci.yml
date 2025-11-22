@@ -5,17 +5,24 @@ name: CI
 # - Go 1.25+ required (matches go.mod requirement)
 # - Beta phase: Continue-on-error for lint (non-blocking during rapid development)
 #
-# Branch Strategy:
-# - main: Primary development branch
+# Branch Strategy (Git-Flow):
+# - main: Production-ready code (releases only)
+# - develop: Active development branch
+# - release/*: Release preparation branches
+# - hotfix/*: Critical production fixes
 # - Pull requests: Must pass all tests before merge
 
 on:
   push:
     branches:
       - main
+      - develop
+      - 'release/**'
+      - 'hotfix/**'
   pull_request:
     branches:
       - main
+      - develop
 
 jobs:
   # Unit tests - Cross-platform
