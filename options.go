@@ -218,7 +218,9 @@ func runeWidthInternal(r rune) int {
 	// ========================================
 	// Zero-Width Characters (O(1))
 	// ========================================
-	if r == 0x200D || r == 0x200C {
+	// Format characters (U+200B-U+200F):
+	// ZWSP, ZWNJ, ZWJ, LRM, RLM - all zero-width formatting characters
+	if r >= 0x200B && r <= 0x200F {
 		return 0
 	}
 	if r >= 0xFE00 && r <= 0xFE0F {
@@ -240,12 +242,30 @@ func runeWidthInternal(r rune) int {
 	}
 
 	// ========================================
-	// Tier 4: Binary Search Fallback (O(log n))
+	// Tier 4: Multi-Stage Table Lookup (O(1))
 	// ========================================
-	return binarySearchWidthInternal(r)
+	return tableLookupWidthInternal(r)
+}
+
+// tableLookupWidthInternal performs O(1) width lookup using the 3-stage table,
+// returning -1 for ambiguous characters (encoding 0b11) so the caller can
+// apply the configured East Asian width.
+//
+// Performance: O(1), 0 allocations.
+func tableLookupWidthInternal(r rune) int {
+	cp := uint32(r)
+	rootIdx := widthRoot[cp>>13]
+	midIdx := widthMiddle[rootIdx][cp>>7&0x3F]
+	packed := widthLeaves[midIdx][cp>>2&0x1F]
+	width := (packed >> (2 * (cp & 0x03))) & 0x03
+	if width == 3 {
+		return -1 // ambiguous - caller decides
+	}
+	return int(width)
 }
 
 // binarySearchWidthInternal performs binary search and returns -1 for ambiguous characters.
+// Kept for backward compatibility; tableLookupWidthInternal is preferred.
 func binarySearchWidthInternal(r rune) int {
 	// Search in generated wide table (width 2)
 	if binarySearch(r, wideTableGenerated) {

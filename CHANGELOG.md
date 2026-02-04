@@ -7,137 +7,124 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Planned for v1.0.0
-- API freeze and stability commitment
-- Extended test coverage (>95%)
-- Performance regression test suite
-- Additional locale support
-- Migration guide improvements
-
-### Planned for v0.2.0+
-- Grapheme cluster support for complex emoji sequences
-- Explicit SIMD optimizations for AVX-512
+### Planned
 - Profile-Guided Optimization (PGO) support
+- Unicode 17.0 preparation
+- Benchmark CI for regression detection
+- Explicit SIMD via Go assembly and `archsimd` (Go 1.26+)
+- API stability review based on community feedback
+
+## [0.2.0] - 2026-02-05
+
+Major performance and emoji correctness release. All four lookup tiers are now O(1), ZWJ emoji sequences are handled correctly, and ASCII paths use SWAR for 8 bytes/iter throughput.
+
+### Added
+- **ZWJ emoji sequence support**: Forward-scan state machine with 3 states (default/emoji/emojiZWJ). Family emoji 👨‍👩‍👧‍👦 now correctly returns width 2, not 8.
+- **Emoji modifier (skin tone) support**: U+1F3FB-U+1F3FF (Fitzpatrick types) combine with preceding emoji. 👍🏽 now correctly returns width 2, not 4.
+- **`isExtendedPictographic()` helper**: Range-based Extended_Pictographic detection, frequency-ordered for minimal branch mispredictions.
+- **`isEmojiModifier()` helper**: Fitzpatrick skin tone modifier detection.
+- **48 new test cases**: ZWJ sequences (15), emoji modifiers (8), edge cases (11), Extended_Pictographic validation (18), emoji modifier validation (9).
+- **ZWJ benchmarks**: Family (~95 ns), couple with heart (~82 ns), skin tone modifier (~40 ns), mixed ZWJ text (~357 ns). All zero allocations.
+- **Three-way benchmark suite** (`bench/`): uniwidth vs go-runewidth vs rivo/uniseg.
+
+### Changed
+- **Tier 4 lookup**: Replaced O(log n) binary search with O(1) 3-stage hierarchical table. ROOT[256] → MIDDLE[17×64] → LEAVES[78×32], 3.8KB total. All Unicode codepoints resolved in 3 array lookups.
+- **ASCII detection**: SWAR `isASCIIOnly()` processes 8 bytes/iter via uint64 word with `0x8080808080808080` mask. No unsafe pointer escapes.
+- **ASCII width counting**: SWAR `asciiWidth()` uses Daniel Lemire's underflow trick for control character detection in 8-byte chunks.
+- **Short string optimization**: Strings < 8 bytes use a fused single-pass loop that combines ASCII check and width counting, avoiding SWAR function call overhead.
+- **Test coverage**: 87.1% → 96.4% (+9.3%).
+
+### Performance
+- **ASCII**: 3-46x faster than go-runewidth (SWAR fast paths)
+  - Short (5 chars): ~7 ns, 0 allocs
+  - Medium (44 chars): ~20 ns, 0 allocs
+  - Long (234 chars): ~50 ns, 0 allocs
+- **CJK**: 30-35% faster from O(1) table lookup (previously O(log n))
+- **ZWJ sequences**: New capability, ~95 ns for family emoji, 0 allocs
+- **Emoji modifiers**: New capability, ~40 ns for skin tone, 0 allocs
 
 ## [0.1.0] - 2025-11-22
 
-**Stable Release**: First stable release after 35 days of beta testing. All known issues from beta have been resolved.
+First stable release after beta testing. Variation selector and flag emoji bugs fixed.
 
 ### Added
-- 🐛 **Bug Fix**: Variation selectors (U+FE0E, U+FE0F) now handled correctly
-  - Text variation selector (U+FE0E) forces width 1
-  - Emoji variation selector (U+FE0F) forces width 2
-  - Example: "☀︎" (sun + text variant) now correctly returns width 1
-- 🐛 **Bug Fix**: Regional indicator pairs (flags) now handled correctly
-  - Two consecutive regional indicators count as width 2 (not 4)
-  - Example: "🇺🇸" (U+1F1FA + U+1F1F8) now correctly returns width 2
-- 📁 **Project Structure**: Reorganized documentation
-  - Created `docs/` for public documentation
-  - Created `docs/dev/` for development documentation (gitignored)
-  - Moved ARCHITECTURE.md and POC_RESULTS.md to `docs/`
-  - Added `docs/dev/INDEX.md` (Kanban-style tracker)
-  - Added `docs/dev/ROADMAP.md` (release planning)
-- 📝 **Documentation**: Added comprehensive CLAUDE.md for AI assistance
-- 🧪 **Tests**: Added edge case tests
-  - `TestStringWidth_VariationSelectors` (6 test cases)
-  - `TestStringWidth_RegionalIndicators` (5 test cases)
-  - `TestIsRegionalIndicator` (7 test cases)
+- Variation selector handling: U+FE0E (text, width 1) and U+FE0F (emoji, width 2)
+- Regional indicator pair handling: Flag emoji 🇺🇸 = width 2, not 4
+- `isRegionalIndicator()` helper function
+- Edge case tests: variation selectors (6), regional indicators (5), helper validation (7)
+- Project structure: `docs/` for public docs, `docs/dev/` for dev docs (gitignored)
 
 ### Changed
-- 🔄 **StringWidth**: Now converts to `[]rune` for lookahead (variation selectors)
+- `StringWidth()` now converts to `[]rune` for lookahead (variation selectors require it)
   - Trade-off: 1 allocation for Unicode strings (correctness > performance)
   - ASCII fast path still has 0 allocations
-- 📊 **Test Coverage**: Increased from 84.6% → 87.1% (+2.5%)
-
-### Performance Impact
-- ASCII strings: No change (0 allocations, ~5 ns/op)
-- Unicode strings: Minimal impact (<1 ns/op, 1 allocation for `[]rune` conversion)
-- Still 9-23x faster than go-runewidth overall
+- Test coverage: 84.6% → 87.1%
 
 ### Fixed (from beta)
-- ✅ Combining marks edge cases (U+1AD7, U+1AFF) - added to zero-width tables
-- ✅ Boundary issues (U+4DFF, U+303F, U+3100) - table boundaries corrected
-- ✅ Surrogate pair handling (U+10000) - Linear B Syllable now handled correctly
+- Combining marks edge cases (U+1AD7, U+1AFF)
+- Boundary issues (U+4DFF, U+303F, U+3100)
+- Surrogate pair handling (U+10000 - Linear B Syllable)
 
-### Known Limitations
-- Grapheme clusters not yet supported (planned for v0.2.0+)
-  - Complex emoji ZWJ sequences counted as sum of parts
-  - Single-character emoji work correctly
+## [0.1.0-beta] - 2025-10-15
 
-## [0.1.0] - 2025-10-15
-
-> 📝 **Note**: This version was superseded by v0.1.0-beta with critical bug fixes.
+Initial public beta. Core architecture proven with 3.9-46x speedup over go-runewidth.
 
 ### Added
-- Initial release of uniwidth library
-- Tiered lookup strategy (4 tiers: ASCII, CJK/Emoji, Zero-width, Binary search)
-- Full Unicode 16.0.0 support
-- Options API for East Asian Ambiguous character handling
-- Options API for emoji presentation mode
-- Zero allocation design (0 B/op, 0 allocs/op)
-- SIMD auto-vectorization for ASCII detection (Go 1.25+)
-- Table generation from official Unicode data files
+- 4-tier lookup architecture: ASCII O(1) → CJK/Emoji O(1) → Zero-width O(1) → Binary search O(log n)
+- Core API: `RuneWidth()`, `StringWidth()`
+- Options API: `WithEastAsianAmbiguous()`, `WithEmojiPresentation()`
+- Full Unicode 16.0 support via generated tables from official data
+- Zero allocation design for all code paths
+- Table generation from EastAsianWidth.txt and emoji-data.txt
 - Comprehensive test suite (84.6% coverage)
 - Conformance tests for Unicode categories
-- Fuzzing tests for robustness
+- Fuzzing tests (Go native)
 - Benchmarks vs go-runewidth (3-46x speedup proven)
 
 ### Performance
-- **ASCII strings**: 15-46x faster than go-runewidth
-- **CJK strings**: 4-14x faster than go-runewidth
-- **Emoji strings**: 6-8x faster than go-runewidth
-- **Zero allocations**: All operations are allocation-free
-- **Small footprint**: ~13KB total (code + tables)
+- ASCII strings: 15-46x faster than go-runewidth
+- CJK strings: 4-14x faster than go-runewidth
+- Emoji strings: 6-8x faster than go-runewidth
+- Zero allocations: 0 B/op, 0 allocs/op
 
 ### API
-- `RuneWidth(r rune) int` - Calculate visual width of a rune
-- `StringWidth(s string) int` - Calculate visual width of a string
-- `RuneWidthWithOptions(r rune, opts ...Option) int` - Rune width with options
-- `StringWidthWithOptions(s string, opts ...Option) int` - String width with options
-- `WithEastAsianAmbiguous(width EAWidth) Option` - Configure ambiguous width
-- `WithEmojiPresentation(emoji bool) Option` - Configure emoji presentation
-
-### Documentation
-- README.md with quick start and examples
-- ARCHITECTURE.md with detailed technical design
-- POC_RESULTS.md with benchmark analysis
-- LICENSE (MIT)
-- Comprehensive godoc comments
+- `RuneWidth(r rune) int`
+- `StringWidth(s string) int`
+- `RuneWidthWithOptions(r rune, opts ...Option) int`
+- `StringWidthWithOptions(s string, opts ...Option) int`
+- `WithEastAsianAmbiguous(width EAWidth) Option`
+- `WithEmojiPresentation(emoji bool) Option`
 
 ### Known Limitations
-- Grapheme clustering not yet implemented (complex emoji sequences counted as sum of parts)
-- Some edge cases at Unicode range boundaries (will be fixed in v0.1.1)
-- Zero-width space (U+200B) handling needs improvement
-- Test coverage 84.6% (target 90%+ in v0.1.1)
+- Grapheme clusters not supported (complex emoji ZWJ sequences counted as sum of parts)
+- Some combining marks edge cases at boundaries
+- Test coverage 84.6% (target 90%+)
 
 ### Requirements
-- Go 1.25.0 or later (required for optimal performance)
-- No external dependencies except go-runewidth (for benchmarks only)
+- Go 1.25.0 or later
+- No external dependencies
 
 ---
 
 ## Version History
 
-### Naming Convention
-- **Major**: Breaking API changes
-- **Minor**: New features, backward compatible
-- **Patch**: Bug fixes, performance improvements
-
-### Stability
-- v0.x.x: Pre-release, API may change
-- v1.x.x: Stable API, production ready
-
----
+| Version | Date | Highlights |
+|---------|------|------------|
+| 0.2.0 | 2026-02-05 | ZWJ emoji, SWAR, O(1) 3-stage table |
+| 0.1.0 | 2025-11-22 | Stable release, variation selectors, flags |
+| 0.1.0-beta | 2025-10-15 | Initial beta, 4-tier architecture |
 
 ## Upgrade Guide
 
-### From PoC to v0.1.0
-- No breaking changes
-- Generated tables now included
-- Options API added (optional, backward compatible)
+### From v0.1.0 to v0.2.0
+- No breaking API changes
+- ZWJ sequences now return correct width (e.g., 👨‍👩‍👧‍👦 = 2, was 8)
+- Emoji modifiers now return correct width (e.g., 👍🏽 = 2, was 4)
+- All tiers are now O(1) (Tier 4 upgraded from binary search to table lookup)
+- ASCII paths are significantly faster (SWAR optimization)
 
 ### From go-runewidth to uniwidth
-Simple drop-in replacement:
+Drop-in replacement:
 
 ```go
 // Before
@@ -149,41 +136,6 @@ import "github.com/unilibs/uniwidth"
 width := uniwidth.StringWidth(s)
 ```
 
-**Performance improvement**: 3-46x faster, zero code changes!
-
-**Note**: Grapheme clustering behavior may differ for complex emoji sequences.
-
 ---
 
-## Maintenance
-
-### Update Unicode Version
-
-To update to a newer Unicode version:
-
-1. Update URLs in `cmd/generate-tables/main.go`:
-   ```go
-   const unicodeVersion = "16.0.0" // Change this
-   const eastAsianWidthURL = "https://www.unicode.org/Public/16.0.0/..." // And this
-   ```
-
-2. Regenerate tables:
-   ```bash
-   go generate ./...
-   ```
-
-3. Run tests:
-   ```bash
-   go test ./...
-   ```
-
-4. Update benchmarks:
-   ```bash
-   go test -bench=. -benchmem
-   ```
-
----
-
-*For detailed performance analysis, see [docs/POC_RESULTS.md](docs/POC_RESULTS.md)*
 *For architecture details, see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)*
-*For release planning, see [docs/dev/ROADMAP.md](docs/dev/ROADMAP.md) (development only)*

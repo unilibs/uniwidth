@@ -6,6 +6,7 @@ replace github.com/unilibs/uniwidth => ../
 
 require (
 	github.com/mattn/go-runewidth v0.0.19
+	github.com/rivo/uniseg v0.4.7
 	github.com/unilibs/uniwidth v0.0.0-00010101000000-000000000000
 )
 

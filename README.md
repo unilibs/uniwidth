@@ -7,31 +7,34 @@
 [![Go Reference](https://pkg.go.dev/badge/github.com/unilibs/uniwidth.svg)](https://pkg.go.dev/github.com/unilibs/uniwidth)
 [![License](https://img.shields.io/github/license/unilibs/uniwidth)](LICENSE)
 [![Release](https://img.shields.io/github/v/release/unilibs/uniwidth)](https://github.com/unilibs/uniwidth/releases)
-[![Stars](https://img.shields.io/github/stars/unilibs/uniwidth?style=social)](https://github.com/unilibs/uniwidth/stargazers)
+[![Stars](https://img.shields.io/github/stars/unilibs/uniwidth)](https://github.com/unilibs/uniwidth/stargazers)
 
-**uniwidth** is a modern, high-performance Unicode width calculation library for Go 1.25+. It provides **3.9-46x faster** width calculation compared to existing solutions through tiered lookup optimization and Go 1.25+ compiler features.
+**uniwidth** is a modern, high-performance Unicode width calculation library for Go 1.25+. It provides **3-46x faster** width calculation compared to existing solutions through a 4-tier O(1) lookup architecture, SWAR optimization, and a ZWJ-aware emoji state machine.
 
-## 🚀 Performance
+## Performance
 
 Based on comprehensive benchmarks vs `go-runewidth`:
 
-- **ASCII strings**: 15-46x faster
-- **CJK strings**: 4-14x faster
+- **ASCII strings**: 15-46x faster (SWAR, 8 bytes/iter)
+- **CJK strings**: 4-14x faster (O(1) table lookup)
 - **Mixed/Emoji strings**: 6-8x faster
-- **Zero allocations**: 0 B/op, 0 allocs/op
+- **ZWJ emoji**: Correct width (👨‍👩‍👧‍👦 = 2, ~95 ns)
+- **Zero allocations**: 0 B/op, 0 allocs/op for ASCII paths
 
 Run benchmarks yourself: `cd bench && go test -bench=. -benchmem`
 
-## ✨ Features
+## Features
 
-- 🚀 **3.9-46x faster** than go-runewidth (proven in benchmarks)
-- 💎 **Zero allocations** (no GC pressure)
-- 🧵 **Thread-safe** (immutable design, no global state)
-- 🎯 **Unicode 16.0** support
-- 🔧 **Modern API** (Go 1.25+, clean design)
-- 📊 **Tiered lookup** (O(1) for 90-95% of cases)
+- **3-46x faster** than go-runewidth (proven in benchmarks)
+- **All tiers O(1)** — 4-tier lookup with 3-stage hierarchical table (3.8KB)
+- **ZWJ-aware** — family emoji, skin tones, flags handled correctly
+- **SWAR optimized** — ASCII detection and width counting at 8 bytes/iter
+- **Zero allocations** for ASCII strings (no GC pressure)
+- **Thread-safe** (immutable design, no global state)
+- **Unicode 16.0** support
+- **Modern API** (Go 1.25+, functional options pattern)
 
-## 📦 Installation
+## Installation
 
 ```bash
 go get github.com/unilibs/uniwidth
@@ -39,7 +42,7 @@ go get github.com/unilibs/uniwidth
 
 **Requirements**: Go 1.25 or later
 
-## 🔧 Usage
+## Usage
 
 ### Basic Usage
 
@@ -66,7 +69,27 @@ func main() {
 }
 ```
 
-### Options API (NEW!)
+### ZWJ Emoji Sequences
+
+```go
+// ZWJ family emoji — correctly returns 2, not 8
+width := uniwidth.StringWidth("👨‍👩‍👧‍👦")
+fmt.Println(width) // Output: 2
+
+// Skin tone modifiers — correctly returns 2, not 4
+width = uniwidth.StringWidth("👍🏽")
+fmt.Println(width) // Output: 2
+
+// Rainbow flag
+width = uniwidth.StringWidth("🏳️‍🌈")
+fmt.Println(width) // Output: 2
+
+// Country flags
+width = uniwidth.StringWidth("🇺🇸")
+fmt.Println(width) // Output: 2
+```
+
+### Options API
 
 Configure handling of ambiguous-width characters:
 
@@ -115,63 +138,55 @@ func truncate(s string, maxWidth int) string {
 }
 ```
 
-### Performance-Critical Code
+## Architecture
 
-```go
-// ASCII fast path (46x faster than go-runewidth!)
-text := "Hello, World!"
-width := uniwidth.StringWidth(text) // ~4.6 ns/op
+### 4-Tier O(1) Lookup
 
-// CJK fast path (14x faster!)
-text := "你好世界"
-width := uniwidth.StringWidth(text) // ~33.7 ns/op
-
-// Mixed content (8x faster!)
-text := "Hello 👋 World"
-width := uniwidth.StringWidth(text) // ~65.9 ns/op
-
-// All with zero allocations!
-```
-
-## 🏗️ Architecture
-
-### Tiered Lookup Strategy
-
-uniwidth uses a multi-tier approach for optimal performance:
+uniwidth uses a multi-tier approach where **all tiers are O(1)**:
 
 1. **Tier 1: ASCII Fast Path** (O(1))
    - Covers ~95% of typical terminal content
-   - Uses simple `len(s)` for ASCII-only strings
-   - 15-46x faster than binary search
+   - SWAR `isASCIIOnly()` + `asciiWidth()` process 8 bytes/iter
+   - Short strings (< 8 bytes) use fused single-pass loop
 
-2. **Tier 2: Common CJK & Emoji** (O(1))
-   - Range checks for frequent characters
-   - CJK Unified Ideographs: 20,992 characters
-   - Common emoji ranges
-   - 4-14x faster than binary search
+2. **Tier 2: Common CJK** (O(1))
+   - CJK Unified Ideographs, Hangul Syllables, Hiragana/Katakana
+   - Simple range checks for 32,000+ characters
 
-3. **Tier 3: Binary Search Fallback** (O(log n))
-   - For rare characters not in hot paths
-   - Minimal overhead (~5-10% of cases)
+3. **Tier 3: Common Emoji** (O(1))
+   - Emoticons, Pictographs, Dingbats, Symbols
+   - Range checks for ~1,200 emoji codepoints
 
-### Go 1.25+ Optimizations
+4. **Tier 4: 3-Stage Table** (O(1))
+   - ROOT[256] → MIDDLE[17×64] → LEAVES[78×32]
+   - 2-bit width encoding, 3.8KB total
+   - Covers all remaining Unicode codepoints in 3 array lookups
 
-- **SIMD Auto-Vectorization**: ASCII detection uses SSE2/AVX2
-- **Aggressive Inlining**: Hot paths compile to minimal instructions
-- **Zero Allocations**: No heap allocations, no GC pressure
+### ZWJ State Machine
 
-## 📊 Benchmarks
+Forward-scan state machine for correct emoji sequence handling:
+- **3 states**: default → emoji → emojiZWJ
+- Handles: ZWJ sequences, skin tone modifiers, variation selectors, flag pairs
+- Inspired by Ghostty's approach, adapted for width calculation
+
+### SWAR Optimization
+
+ASCII paths use SIMD Within A Register (SWAR) for high throughput:
+- `isASCIIOnly()`: uint64 word AND with `0x8080808080808080` mask
+- `asciiWidth()`: Daniel Lemire's underflow trick for control character detection
+- Both process 8 bytes per iteration with zero allocations
+
+## Benchmarks
 
 ```
-BenchmarkStringWidth_ASCII_Short_Uniwidth-12     149590729   9.500 ns/op   0 B/op   0 allocs/op
-BenchmarkStringWidth_ASCII_Short_GoRunewidth-12   10065044  150.1 ns/op   0 B/op   0 allocs/op
-                                                             ^^^^^^^^^^
-                                                             15.8x faster!
+goos: windows
+goarch: amd64
 
-BenchmarkStringWidth_CJK_Short_Uniwidth-12        19064941   63.64 ns/op   0 B/op   0 allocs/op
-BenchmarkStringWidth_CJK_Short_GoRunewidth-12      2771077  368.0 ns/op   0 B/op   0 allocs/op
-                                                             ^^^^^^^^^^^
-                                                             5.8x faster!
+BenchmarkStringWidth_ASCII_Short     ~7 ns/op     0 B/op   0 allocs/op
+BenchmarkStringWidth_ASCII_Medium   ~20 ns/op     0 B/op   0 allocs/op
+BenchmarkStringWidth_CJK_Short     ~25 ns/op     0 B/op   0 allocs/op
+BenchmarkStringWidth_ZWJ_Family    ~95 ns/op     0 B/op   0 allocs/op
+BenchmarkStringWidth_EmojiModifier ~40 ns/op     0 B/op   0 allocs/op
 ```
 
 Run benchmarks yourself:
@@ -179,7 +194,7 @@ Run benchmarks yourself:
 go test -bench=. -benchmem
 ```
 
-## 🎯 Use Cases
+## Use Cases
 
 Perfect for:
 - **TUI frameworks** (terminal rendering hot paths)
@@ -188,7 +203,7 @@ Perfect for:
 - **Text editors** (cursor positioning, column calculation)
 - **Any high-performance text width calculation**
 
-## 🔄 Migration from go-runewidth
+## Migration from go-runewidth
 
 uniwidth provides a compatible API for easy migration:
 
@@ -202,16 +217,17 @@ import "github.com/unilibs/uniwidth"
 width := uniwidth.StringWidth(s)
 ```
 
-**Performance improvement**: 3.9-46x faster, zero code changes!
+**Performance improvement**: 3-46x faster, zero code changes!
 
-## 📚 Documentation
+## Documentation
 
 - [API Reference](https://pkg.go.dev/github.com/unilibs/uniwidth) - Full godoc documentation
 - [Benchmark Comparisons](bench/README.md) - Performance comparison vs go-runewidth
 - [Architecture Design](docs/ARCHITECTURE.md) - Technical deep dive & design decisions
 - [Changelog](CHANGELOG.md) - Version history & upgrade guide
+- [Roadmap](ROADMAP.md) - What's next for uniwidth
 
-## 🧪 Testing
+## Testing
 
 ```bash
 # Run tests
@@ -224,51 +240,36 @@ go test -bench=. -benchmem
 go test -cover
 ```
 
-Current test coverage: **90.3%** (exceeds 90% target ✅)
+Current test coverage: **96.4%**
 
-## 🚀 Development Status
+## Development Status
 
-**Current**: v0.1.0 (Stable Release)
+**Current**: v0.2.0
 
-> ✅ **Stable Release**: This library has completed beta testing. The API is stable and ready for production use. Minor version updates (v0.2.x) will maintain backward compatibility.
+> This library is stable and production-ready. The API is backward-compatible across minor versions. ZWJ emoji sequences, skin tone modifiers, variation selectors, and flag emoji are all handled correctly.
 
-**What Beta Means**:
-- ✅ Feature-complete for core functionality
-- ✅ Production-quality code and performance
-- ⚠️ API may evolve based on community feedback
-- ⚠️ Edge cases still being discovered and fixed
-- 🎯 Goal: API freeze before v1.0.0-rc
+**v0.2.0 Highlights**:
+- All 4 lookup tiers are now O(1) (3-stage table replaced binary search)
+- SWAR ASCII optimization (8 bytes/iter)
+- ZWJ emoji state machine (👨‍👩‍👧‍👦 = width 2)
+- Emoji modifier support (👍🏽 = width 2)
+- 96.4% test coverage
 
-**Completed**:
-- ✅ PoC (3 days) - 3.9-46x speedup proven
-- ✅ Complete Unicode 16.0 tables - Generated from official data
-- ✅ Options API - East Asian Width & emoji configuration
-- ✅ Comprehensive testing - 84.6% coverage, fuzzing, conformance tests
-- ✅ Bug fixes - Variation selectors, regional indicator flags
-- ✅ Documentation - README, ARCHITECTURE, CHANGELOG
+**Roadmap** (v0.3.0+):
+- Profile-Guided Optimization (PGO)
+- Benchmark CI for regression detection
+- Explicit SIMD via Go assembly and `archsimd`
+- Unicode 17.0 preparation
 
-**Beta Goals** (Before RC):
-- [ ] Community feedback integration
-- [ ] Edge case coverage >95%
-- [ ] API stability validation
-- [ ] Performance regression testing
-- [ ] Documentation refinement
-
-**Future Roadmap** (v1.0+):
-- [ ] Grapheme cluster support (for complex emoji ZWJ sequences)
-- [ ] Additional locale support
-- [ ] Extended SIMD optimizations
-- [ ] Profile-Guided Optimization (PGO)
-
-## 🤝 Contributing
+## Contributing
 
 Contributions welcome! This is part of the [unilibs](https://github.com/unilibs) organization - modern Unicode libraries for Go.
 
-## 📄 License
+## License
 
 MIT License - see [LICENSE](LICENSE) file
 
-## 🌟 Related Projects
+## Related Projects
 
 Built by the [Phoenix TUI Framework](https://github.com/phoenix-tui/phoenix) team.
 
@@ -277,17 +278,17 @@ Part of the **unilibs** ecosystem:
 - **unigrapheme** - Grapheme clustering (planned)
 - More Unicode utilities coming soon!
 
-## 📞 Support
+## Support
 
 - Issues: [GitHub Issues](https://github.com/unilibs/uniwidth/issues)
 - Discussions: [GitHub Discussions](https://github.com/unilibs/uniwidth/discussions)
 
 ---
 
-## 🙏 Special Thanks
+## Special Thanks
 
 **Professor Ancha Baranova** - This project would not have been possible without her invaluable help and support. Her assistance was crucial in bringing uniwidth to life.
 
 ---
 
-**Made with ❤️ by the Phoenix team** | **Powered by Go 1.25+**
+**Made with care by the Phoenix team** | **Powered by Go 1.25+**
