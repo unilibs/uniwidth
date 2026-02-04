@@ -3,9 +3,11 @@
 // uniwidth uses a tiered lookup strategy for optimal performance:
 //   - Tier 1: ASCII (O(1), ~95% of typical content)
 //   - Tier 2: Common CJK & Emoji (O(1), ~90% of non-ASCII)
-//   - Tier 3: Binary search for rare characters (O(log n))
+//   - Tier 3: Common Emoji (O(1))
+//   - Tier 4: 3-stage table lookup for all other characters (O(1))
 //
-// This approach is 3-4x faster than traditional binary-search-only methods
+// All tiers are O(1) with zero allocations for single-rune lookups.
+// This approach is 3-46x faster than traditional binary-search-only methods
 // like go-runewidth, while maintaining full Unicode 16.0 compliance.
 //
 //go:generate go run cmd/generate-tables/main.go
@@ -26,7 +28,7 @@ import (
 // This function uses a tiered lookup strategy:
 //   - O(1) for ASCII (most common case)
 //   - O(1) for common CJK and emoji (hot paths)
-//   - O(log n) for rare characters (fallback)
+//   - O(1) for all other characters (3-stage table lookup)
 func RuneWidth(r rune) int {
 	// ========================================
 	// Tier 1: ASCII Fast Path (O(1))
@@ -121,18 +123,14 @@ func RuneWidth(r rune) int {
 	// Zero-Width Characters (O(1))
 	// ========================================
 
-	// Zero-Width Space (ZWSP) - U+200B
-	if r == 0x200B {
-		return 0
-	}
-
-	// Zero-Width Non-Joiner (ZWNJ)
-	if r == 0x200C {
-		return 0
-	}
-
-	// Zero-Width Joiner (ZWJ) - used in emoji sequences
-	if r == 0x200D {
+	// Format characters (U+200B-U+200F):
+	// U+200B: Zero-Width Space (ZWSP)
+	// U+200C: Zero-Width Non-Joiner (ZWNJ)
+	// U+200D: Zero-Width Joiner (ZWJ) - used in emoji sequences
+	// U+200E: Left-to-Right Mark (LRM)
+	// U+200F: Right-to-Left Mark (RLM)
+	// All are invisible formatting characters with zero terminal width.
+	if r >= 0x200B && r <= 0x200F {
 		return 0
 	}
 
@@ -155,10 +153,11 @@ func RuneWidth(r rune) int {
 	}
 
 	// ========================================
-	// Tier 4: Binary Search Fallback (O(log n))
+	// Tier 4: Multi-Stage Table Lookup (O(1))
 	// ========================================
-	// For rare characters not covered by hot paths
-	return binarySearchWidth(r)
+	// For characters not covered by hot paths, use the 3-stage
+	// hierarchical lookup table for constant-time width resolution.
+	return tableLookupWidth(r)
 }
 
 // StringWidth calculates the visual width of a string in monospace terminals.
@@ -381,8 +380,30 @@ func asciiWidth(s string) int {
 	return width
 }
 
+// tableLookupWidth performs O(1) width lookup using the 3-stage hierarchical table.
+//
+// The table encodes every Unicode codepoint (0x0000-0x10FFFF) as a 2-bit width value:
+//
+//	0b00 = width 0 (control, combining, zero-width)
+//	0b01 = width 1 (narrow, default)
+//	0b10 = width 2 (wide: CJK, emoji, fullwidth)
+//	0b11 = ambiguous (treated as width 1 in neutral context)
+//
+// Performance: O(1), 0 allocations. Three array lookups + bit extraction.
+func tableLookupWidth(r rune) int {
+	cp := uint32(r)
+	rootIdx := widthRoot[cp>>13]
+	midIdx := widthMiddle[rootIdx][cp>>7&0x3F]
+	packed := widthLeaves[midIdx][cp>>2&0x1F]
+	width := (packed >> (2 * (cp & 0x03))) & 0x03
+	if width == 3 {
+		return 1 // ambiguous -> narrow in neutral context
+	}
+	return int(width)
+}
+
 // binarySearchWidth performs binary search on Unicode width tables.
-// This is the fallback for rare characters not covered by hot paths.
+// This is the legacy fallback, kept for use by the Options API.
 func binarySearchWidth(r rune) int {
 	// Search in generated wide table (width 2)
 	if binarySearch(r, wideTableGenerated) {

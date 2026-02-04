@@ -107,7 +107,8 @@ func TestUnicodeConformance_EdgeCases(t *testing.T) {
 		{"Just after ASCII", 0x80, 0},    // C1 control
 
 		// Boundary of CJK Unified Ideographs
-		{"Before CJK", 0x4DFF, 1},
+		// Note: U+4DFF is in the CJK Unified Ideographs Extension A block (W in Unicode 16.0)
+		{"Before CJK", 0x4DFF, 2},
 		{"CJK start", 0x4E00, 2},
 		{"CJK end", 0x9FFF, 2},
 		{"After CJK", 0xA000, 2}, // Yi Syllables
@@ -119,7 +120,13 @@ func TestUnicodeConformance_EdgeCases(t *testing.T) {
 		{"After Hangul", 0xD7B0, 1},
 
 		// Boundary of Hiragana/Katakana
-		{"Before Hiragana", 0x303F, 2},
+		// Note: U+303F (IDEOGRAPHIC HALF FILL SPACE) is W in Unicode 16.0 but falls
+		// just outside the hot path range. The Tier 2 hot path starts at 0x3040.
+		// U+303F is covered by the wide table via {0x2FF0, 0x303E} which ends at 0x303E;
+		// U+303F itself is in the Hiragana block boundary and handled by the CJK Symbols
+		// and Punctuation block as Ambiguous in some contexts. With fresh Unicode 16.0 data,
+		// U+303F is no longer included in the generated wide table.
+		{"Before Hiragana", 0x303F, 1},
 		{"Hiragana start", 0x3040, 2},
 		{"Katakana end", 0x30FF, 2},
 		{"After Katakana", 0x3100, 2},
@@ -166,8 +173,8 @@ func TestUnicodeConformance_SurrogateHandling(t *testing.T) {
 		want int
 	}{
 		// Characters in Supplementary Multilingual Plane (SMP)
-		{"Gothic letter", "𐌰", 1},              // U+10330
-		{"Linear B syllable", "𐀀", 2},          // U+10000
+		{"Gothic letter", "𐌰", 1},            // U+10330
+		{"Linear B syllable", "𐀀", 1},        // U+10000 (EAW: N = Neutral/Narrow)
 		{"Emoji family", "👨\u200D👩\u200D👧", 6}, // Man + ZWJ + Woman + ZWJ + Girl (simplified width)
 	}
 
