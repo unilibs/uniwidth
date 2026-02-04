@@ -3,26 +3,21 @@ name: CI
 # Testing Strategy:
 # - Tests run on Linux, macOS, and Windows (library must be cross-platform)
 # - Go 1.25+ required (matches go.mod requirement)
-# - Beta phase: Continue-on-error for lint (non-blocking during rapid development)
 #
-# Branch Strategy (Git-Flow):
-# - main: Production-ready code (releases only)
-# - develop: Active development branch
-# - release/*: Release preparation branches
-# - hotfix/*: Critical production fixes
-# - Pull requests: Must pass all tests before merge
+# Trigger Strategy (anti-duplication):
+# - push on main: catch direct merges/commits
+# - pull_request (all branches): catch PR checks
+# - concurrency group: cancels outdated runs on same PR/branch
 
 on:
   push:
     branches:
       - main
-      - develop
-      - 'release/**'
-      - 'hotfix/**'
   pull_request:
-    branches:
-      - main
-      - develop
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   # Unit tests - Cross-platform
@@ -36,10 +31,10 @@ jobs:
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v6
 
     - name: Set up Go
-      uses: actions/setup-go@v5
+      uses: actions/setup-go@v6
       with:
         go-version: ${{ matrix.go-version }}
         cache: true
@@ -59,7 +54,7 @@ jobs:
 
     - name: Upload coverage to Codecov
       if: matrix.os == 'ubuntu-latest' && matrix.go-version == '1.25'
-      uses: codecov/codecov-action@v4
+      uses: codecov/codecov-action@v5
       continue-on-error: true
       with:
         file: ./coverage.txt
@@ -75,37 +70,19 @@ jobs:
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v6
 
     - name: Set up Go
-      uses: actions/setup-go@v5
+      uses: actions/setup-go@v6
       with:
         go-version: '1.25'
         cache: true
 
     - name: Run golangci-lint
-      uses: golangci/golangci-lint-action@v8
+      uses: golangci/golangci-lint-action@v9
       with:
         version: latest
         args: --timeout=5m
-
-  # Benchmarks
-  benchmark:
-    name: Benchmark
-    runs-on: ubuntu-latest
-
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
-    - name: Set up Go
-      uses: actions/setup-go@v5
-      with:
-        go-version: '1.25'
-        cache: true
-
-    - name: Run benchmarks
-      run: go test -bench=. -benchmem -run=^$ ./...
 
   # Fuzz tests
   fuzz:
@@ -115,10 +92,10 @@ jobs:
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v6
 
     - name: Set up Go
-      uses: actions/setup-go@v5
+      uses: actions/setup-go@v6
       with:
         go-version: '1.25'
         cache: true
@@ -138,10 +115,10 @@ jobs:
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v6
 
     - name: Set up Go
-      uses: actions/setup-go@v5
+      uses: actions/setup-go@v6
       with:
         go-version: '1.25'
         cache: true
@@ -161,10 +138,10 @@ jobs:
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v6
 
     - name: Set up Go
-      uses: actions/setup-go@v5
+      uses: actions/setup-go@v6
       with:
         go-version: '1.25'
         cache: true

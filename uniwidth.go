@@ -395,8 +395,10 @@ func isEmojiModifier(r rune) bool {
 //   - Short strings (< 8 bytes): scalar fallback, O(n) per byte
 //   - Longer strings: ~8x throughput via SWAR, O(n/8) per word + O(n%8) tail
 //   - 0 allocations in all cases
-//nolint:gosec // G103: unsafe usage is intentional for SWAR performance optimization;
+//
 // all pointer arithmetic is bounds-checked by the loop guard (i+8 <= n, i < n).
+//
+//nolint:gosec // G103: unsafe usage is intentional for SWAR performance optimization;
 func isASCIIOnly(s string) bool {
 	n := len(s)
 	if n == 0 {
@@ -446,8 +448,10 @@ func isASCIIOnly(s string) bool {
 // Performance:
 //   - 0 allocations
 //   - ~8x throughput for chunks without control characters
-//nolint:gosec // G103: unsafe usage is intentional for SWAR performance optimization;
+//
 // all pointer arithmetic is bounds-checked by the loop guards (i+8 <= n, i < n, j < 8).
+//
+//nolint:gosec // G103: unsafe usage is intentional for SWAR performance optimization;
 func asciiWidth(s string) int {
 	n := len(s)
 	if n == 0 {
@@ -461,8 +465,8 @@ func asciiWidth(s string) int {
 	// SWAR constants for control character detection.
 	const (
 		// Broadcast 0x20 and 0x7F across all 8 bytes of a uint64.
-		lo20 = uint64(0x2020202020202020)
-		hi80 = uint64(0x8080808080808080)
+		lo20  = uint64(0x2020202020202020)
+		hi80  = uint64(0x8080808080808080)
 		rep7F = uint64(0x7F7F7F7F7F7F7F7F)
 		rep01 = uint64(0x0101010101010101)
 	)

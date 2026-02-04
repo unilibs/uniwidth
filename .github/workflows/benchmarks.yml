@@ -1,0 +1,296 @@
+name: Benchmarks
+
+# Two benchmark jobs:
+# 1. Regression detection: benchstat compares base vs PR branch (same benchmarks)
+# 2. Library comparison: uniwidth vs go-runewidth vs uniseg (three-way table)
+#
+# Note: GitHub Actions shared runners have ~10-20% variance.
+# Results are directional, not absolute. Major regressions (>30%) are reliable.
+
+on:
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  # ============================================================================
+  # Job 1: Regression Detection (benchstat base vs PR)
+  # ============================================================================
+  regression:
+    name: Regression Detection
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.draft == false
+
+    steps:
+    - name: Checkout PR branch
+      uses: actions/checkout@v6
+      with:
+        ref: ${{ github.event.pull_request.head.sha }}
+        path: pr
+
+    - name: Checkout base branch
+      uses: actions/checkout@v6
+      with:
+        ref: ${{ github.event.pull_request.base.sha }}
+        path: base
+
+    - name: Set up Go
+      uses: actions/setup-go@v6
+      with:
+        go-version: '1.25'
+        cache: false
+
+    - name: Install benchstat
+      run: go install golang.org/x/perf/cmd/benchstat@latest
+
+    - name: Run base branch benchmarks
+      working-directory: base
+      run: |
+        go test -bench=. -benchmem -count=5 -benchtime=100ms \
+          -run=^$ ./... 2>/dev/null > ../base-bench.txt || true
+
+    - name: Run PR branch benchmarks
+      working-directory: pr
+      run: |
+        go test -bench=. -benchmem -count=5 -benchtime=100ms \
+          -run=^$ ./... 2>/dev/null > ../pr-bench.txt || true
+
+    - name: Compare benchmarks
+      run: |
+        benchstat base-bench.txt pr-bench.txt > full-comparison.txt 2>&1 || echo "benchstat comparison failed" > full-comparison.txt
+
+        GEOMEAN=$(grep -E "^geomean" full-comparison.txt | head -1 || echo "")
+        REGRESSIONS=$(grep -E "\+[0-9]+\.[0-9]+%" full-comparison.txt | grep -v "~" | head -10 || echo "")
+
+        {
+          echo "## Regression Detection"
+          echo ""
+          echo "Comparing \`${{ github.event.pull_request.base.ref }}\` → PR #${{ github.event.pull_request.number }}"
+          echo ""
+
+          if [ -n "$GEOMEAN" ]; then
+            echo "**Summary:** \`$GEOMEAN\`"
+            echo ""
+          fi
+
+          if [ -n "$REGRESSIONS" ]; then
+            echo "⚠️ **Potential regressions detected:**"
+            echo "\`\`\`"
+            echo "$REGRESSIONS"
+            echo "\`\`\`"
+            echo ""
+          else
+            echo "✅ No significant regressions detected."
+            echo ""
+          fi
+
+          echo "<details>"
+          echo "<summary>Full benchstat output</summary>"
+          echo ""
+          echo "\`\`\`"
+          cat full-comparison.txt
+          echo "\`\`\`"
+          echo ""
+          echo "</details>"
+        } > regression.md
+
+    - name: Upload benchmark results
+      uses: actions/upload-artifact@v4
+      with:
+        name: regression-benchmarks
+        path: |
+          base-bench.txt
+          pr-bench.txt
+          full-comparison.txt
+        retention-days: 30
+
+    - name: Find existing regression comment
+      uses: peter-evans/find-comment@v3
+      id: fc-regression
+      with:
+        issue-number: ${{ github.event.pull_request.number }}
+        comment-author: 'github-actions[bot]'
+        body-includes: '## Regression Detection'
+
+    - name: Post regression comment
+      uses: peter-evans/create-or-update-comment@v4
+      with:
+        comment-id: ${{ steps.fc-regression.outputs.comment-id }}
+        issue-number: ${{ github.event.pull_request.number }}
+        body-path: regression.md
+        edit-mode: replace
+
+  # ============================================================================
+  # Job 2: Library Comparison (uniwidth vs go-runewidth vs uniseg)
+  # ============================================================================
+  comparison:
+    name: Library Comparison
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.draft == false
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v6
+
+    - name: Set up Go
+      uses: actions/setup-go@v6
+      with:
+        go-version: '1.25'
+        cache: true
+
+    - name: Run three-way benchmarks
+      working-directory: bench
+      run: |
+        go test -bench=. -benchmem -count=3 -benchtime=100ms \
+          -run=^$ ./... 2>/dev/null > ../bench-raw.txt || true
+
+    - name: Generate comparison table
+      run: |
+        # Parse benchmark output and build comparison table
+        # Benchmark names follow: BenchmarkStringWidth_{Category}_{Size}_{Library}-N
+        # Extract: category, ns/op for each library
+
+        echo "## Library Comparison" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Platform**: Ubuntu \$(lsb_release -rs), \$(uname -m)" >> $GITHUB_STEP_SUMMARY
+        echo "**CPU**: \$(grep 'model name' /proc/cpuinfo | head -1 | cut -d: -f2 | xargs)" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+
+        # Build the table
+        {
+          echo "| Scenario | uniwidth | go-runewidth | uniseg | vs runewidth | vs uniseg | Winner |"
+          echo "|----------|----------|-------------|--------|-------------|----------|--------|"
+        } > table.md
+
+        # Get unique benchmark scenarios (strip library suffix and CPU count)
+        grep "^Benchmark" bench-raw.txt | sed 's/_Uniwidth-[0-9]*//' | sed 's/_GoRunewidth-[0-9]*//' | sed 's/_Uniseg-[0-9]*//' | awk '{print $1}' | sort -u | while read scenario; do
+          # Pretty name: strip "Benchmark" prefix, replace _ with spaces
+          pretty=$(echo "$scenario" | sed 's/^Benchmark//' | sed 's/_/ /g')
+
+          # Get median ns/op for each library (take middle value of count=3)
+          uni_ns=$(grep "^${scenario}_Uniwidth-" bench-raw.txt | awk '{print $3}' | sort -n | head -2 | tail -1)
+          rw_ns=$(grep "^${scenario}_GoRunewidth-" bench-raw.txt | awk '{print $3}' | sort -n | head -2 | tail -1)
+          seg_ns=$(grep "^${scenario}_Uniseg-" bench-raw.txt | awk '{print $3}' | sort -n | head -2 | tail -1)
+
+          # Skip if uniwidth result is missing
+          [ -z "$uni_ns" ] && continue
+
+          # Format times with units
+          uni_fmt="${uni_ns} ns"
+          rw_fmt="${rw_ns:-—} ns"
+          seg_fmt="${seg_ns:-—} ns"
+
+          # Calculate vs go-runewidth speedup
+          vs_rw="—"
+          if [ -n "$rw_ns" ] && [ "$uni_ns" != "0" ]; then
+            speedup=$(echo "scale=1; $rw_ns / $uni_ns" | bc 2>/dev/null || echo "")
+            if [ -n "$speedup" ]; then
+              # Check if speedup >= 2
+              is_fast=$(echo "$speedup >= 2" | bc 2>/dev/null || echo "0")
+              if [ "$is_fast" = "1" ]; then
+                vs_rw="**${speedup}x**"
+              else
+                vs_rw="${speedup}x"
+              fi
+            fi
+          fi
+
+          # Calculate vs uniseg speedup
+          vs_seg="—"
+          if [ -n "$seg_ns" ] && [ "$uni_ns" != "0" ]; then
+            speedup=$(echo "scale=1; $seg_ns / $uni_ns" | bc 2>/dev/null || echo "")
+            if [ -n "$speedup" ]; then
+              is_fast=$(echo "$speedup >= 2" | bc 2>/dev/null || echo "0")
+              if [ "$is_fast" = "1" ]; then
+                vs_seg="**${speedup}x**"
+              else
+                vs_seg="${speedup}x"
+              fi
+            fi
+          fi
+
+          # Determine winner
+          winner="uniwidth"
+          min_ns="$uni_ns"
+          if [ -n "$rw_ns" ]; then
+            rw_faster=$(echo "$rw_ns < $min_ns" | bc 2>/dev/null || echo "0")
+            [ "$rw_faster" = "1" ] && winner="go-runewidth" && min_ns="$rw_ns"
+          fi
+          if [ -n "$seg_ns" ]; then
+            seg_faster=$(echo "$seg_ns < $min_ns" | bc 2>/dev/null || echo "0")
+            [ "$seg_faster" = "1" ] && winner="uniseg"
+          fi
+
+          # Bold the winner's time
+          if [ "$winner" = "uniwidth" ]; then
+            uni_fmt="**${uni_ns} ns**"
+          elif [ "$winner" = "go-runewidth" ]; then
+            rw_fmt="**${rw_ns} ns**"
+          elif [ "$winner" = "uniseg" ]; then
+            seg_fmt="**${seg_ns} ns**"
+          fi
+
+          echo "| ${pretty} | ${uni_fmt} | ${rw_fmt} | ${seg_fmt} | ${vs_rw} | ${vs_seg} | ${winner} |" >> table.md
+        done
+
+        # Append table to summary
+        cat table.md >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+
+        # Raw output in details
+        echo "<details>" >> $GITHUB_STEP_SUMMARY
+        echo "<summary>Raw benchmark output</summary>" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo '```' >> $GITHUB_STEP_SUMMARY
+        cat bench-raw.txt >> $GITHUB_STEP_SUMMARY
+        echo '```' >> $GITHUB_STEP_SUMMARY
+        echo "</details>" >> $GITHUB_STEP_SUMMARY
+
+        # Build PR comment (table + note)
+        {
+          echo "## Library Comparison"
+          echo ""
+          cat table.md
+          echo ""
+          echo "<details>"
+          echo "<summary>Raw benchmark output</summary>"
+          echo ""
+          echo "\`\`\`"
+          cat bench-raw.txt
+          echo "\`\`\`"
+          echo ""
+          echo "</details>"
+          echo ""
+          echo "> CI runners have ~10-20% variance. For accurate results, run locally: \`cd bench && go test -bench=. -benchmem -count=10\`"
+        } > comparison.md
+
+    - name: Upload comparison results
+      uses: actions/upload-artifact@v4
+      with:
+        name: library-comparison
+        path: |
+          bench-raw.txt
+          table.md
+        retention-days: 30
+
+    - name: Find existing comparison comment
+      uses: peter-evans/find-comment@v3
+      id: fc-comparison
+      with:
+        issue-number: ${{ github.event.pull_request.number }}
+        comment-author: 'github-actions[bot]'
+        body-includes: '## Library Comparison'
+
+    - name: Post comparison comment
+      uses: peter-evans/create-or-update-comment@v4
+      with:
+        comment-id: ${{ steps.fc-comparison.outputs.comment-id }}
+        issue-number: ${{ github.event.pull_request.number }}
+        body-path: comparison.md
+        edit-mode: replace

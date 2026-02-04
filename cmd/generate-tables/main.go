@@ -5,9 +5,9 @@
 // - emoji-data.txt - Emoji presentation properties
 //
 // It generates optimized tables for uniwidth's tiered lookup strategy:
-// - Tier 1-3 (hot paths) are hardcoded in uniwidth.go for O(1) lookup
-// - This generates Tier 4 tables: both legacy binary search tables and
-//   a 3-stage multi-stage lookup table for O(1) fallback
+//   - Tier 1-3 (hot paths) are hardcoded in uniwidth.go for O(1) lookup
+//   - This generates Tier 4 tables: both legacy binary search tables and
+//     a 3-stage multi-stage lookup table for O(1) fallback
 //
 // Usage:
 //

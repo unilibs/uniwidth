@@ -825,7 +825,7 @@ func TestStringWidth_ZWJEdgeCases(t *testing.T) {
 		{
 			name: "Orphan skin tone modifier",
 			s:    "🏽", // U+1F3FD alone
-			want: 2,  // Not preceded by EP, so normal width
+			want: 2,   // Not preceded by EP, so normal width
 		},
 		// ZWJ at string boundaries
 		{
