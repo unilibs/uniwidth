@@ -175,7 +175,7 @@ func TestUnicodeConformance_SurrogateHandling(t *testing.T) {
 		// Characters in Supplementary Multilingual Plane (SMP)
 		{"Gothic letter", "𐌰", 1},            // U+10330
 		{"Linear B syllable", "𐀀", 1},        // U+10000 (EAW: N = Neutral/Narrow)
-		{"Emoji family", "👨\u200D👩\u200D👧", 6}, // Man + ZWJ + Woman + ZWJ + Girl (simplified width)
+		{"Emoji family", "👨\u200D👩\u200D👧", 2}, // Man + ZWJ + Woman + ZWJ + Girl (ZWJ-aware: width 2)
 	}
 
 	for _, tt := range tests {

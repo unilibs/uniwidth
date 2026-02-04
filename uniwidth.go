@@ -163,9 +163,11 @@ func RuneWidth(r rune) int {
 // StringWidth calculates the visual width of a string in monospace terminals.
 //
 // This function provides a fast path for ASCII-only strings,
-// and uses RuneWidth for strings containing Unicode characters.
+// and uses a state machine for correct handling of multi-rune sequences.
 //
 // Special handling:
+//   - ZWJ emoji sequences (👨‍👩‍👧‍👦) are treated as width 2, not the sum of parts
+//   - Emoji modifier sequences (👍🏽) are treated as width 2
 //   - Variation selectors (U+FE0E/U+FE0F) modify the width of the preceding character
 //   - Regional indicator pairs (flags) are counted as width 2, not 4
 func StringWidth(s string) int {
@@ -194,55 +196,115 @@ func StringWidth(s string) int {
 		return asciiWidth(s)
 	}
 
-	// Convert to rune slice for lookahead
+	// Unicode path: convert to rune slice for lookahead.
 	runes := []rune(s)
 	width := 0
+
+	// Emoji sequence state tracking (forward-scan state machine):
+	//   0 = default (not in an emoji sequence)
+	//   1 = after Extended_Pictographic character (may start ZWJ/modifier sequence)
+	//   2 = after EP + (Extend*) + ZWJ (expecting joined emoji)
+	state := 0
 
 	for i := 0; i < len(runes); i++ {
 		r := runes[i]
 
 		// ========================================
-		// Handle Regional Indicator Pairs (Flags)
+		// ZWJ Handling
 		// ========================================
-		// Regional indicators (U+1F1E6 - U+1F1FF) represent country codes.
-		// Two consecutive indicators form a flag emoji with width 2 (not 4).
+		// ZWJ (U+200D) after an Extended_Pictographic transitions to
+		// the "expecting joined emoji" state. ZWJ always has width 0.
+		if r == 0x200D {
+			if state == 1 {
+				state = 2
+			}
+			continue
+		}
+
+		// After EP + ZWJ: if next is EP, it joins (width 0).
+		// This implements the core of GB11: ExtPict Extend* ZWJ × ExtPict.
+		if state == 2 {
+			if isExtendedPictographic(r) {
+				state = 1 // Joined, still in emoji sequence
+				continue  // Width 0 — joined with preceding emoji
+			}
+			// Not a valid join target, reset state and process normally.
+			state = 0
+		}
+
+		// ========================================
+		// Emoji Modifier Handling (Skin Tones)
+		// ========================================
+		// Emoji modifiers (U+1F3FB-U+1F3FF) combine with the preceding
+		// Extended_Pictographic, contributing zero additional width.
+		if state == 1 && isEmojiModifier(r) {
+			continue // Width 0 (modifier combines with preceding emoji)
+		}
+
+		// ========================================
+		// Extend Characters in Emoji Context
+		// ========================================
+		// Variation selectors and combining marks within an active emoji
+		// sequence don't add width and keep the state alive for potential
+		// ZWJ continuation.
+		if state == 1 && (r >= 0xFE00 && r <= 0xFE0F) {
+			continue // VS in emoji sequence, width 0
+		}
+
+		// ========================================
+		// Regional Indicator Pairs (Flags)
+		// ========================================
+		// Two consecutive regional indicators (U+1F1E6-U+1F1FF) form
+		// a flag emoji with width 2 (not 4).
 		if isRegionalIndicator(r) && i+1 < len(runes) && isRegionalIndicator(runes[i+1]) {
-			width += 2 // Flag emoji = 2 columns
-			i++        // Skip the second indicator
+			width += 2
+			i++
+			state = 0
 			continue
 		}
 
 		// ========================================
-		// Handle Variation Selectors
+		// Variation Selectors (Lookahead)
 		// ========================================
-		// Variation selectors modify the presentation of the preceding character:
-		// - U+FE0E: Text presentation (narrow, width 1)
-		// - U+FE0F: Emoji presentation (wide, width 2)
-		//
-		// Note: The variation selector itself has width 0, but it affects
-		// the width calculation of the preceding character.
+		// Variation selectors modify the preceding character's presentation:
+		// - U+FE0E: Text presentation (width 1)
+		// - U+FE0F: Emoji presentation (width 2)
 		if i+1 < len(runes) {
 			next := runes[i+1]
 
-			// Text variation selector: force width 1
 			if next == 0xFE0E {
 				width++
-				i++ // Skip the variation selector
+				i++
+				state = 0
 				continue
 			}
 
-			// Emoji variation selector: force width 2
 			if next == 0xFE0F {
 				width += 2
-				i++ // Skip the variation selector
+				i++
+				if isExtendedPictographic(r) {
+					state = 1
+				} else {
+					state = 0
+				}
 				continue
 			}
 		}
 
 		// ========================================
-		// Default: Use RuneWidth
+		// Default: RuneWidth
 		// ========================================
-		width += RuneWidth(r)
+		w := RuneWidth(r)
+		width += w
+
+		// Track emoji state for ZWJ/modifier sequence detection.
+		if isExtendedPictographic(r) && w > 0 {
+			state = 1
+		} else if w > 0 {
+			state = 0
+		}
+		// When w == 0 (combining marks, tag characters, etc.),
+		// preserve current state to allow Extend* in GB11 pattern.
 	}
 
 	return width
@@ -253,6 +315,72 @@ func StringWidth(s string) int {
 // Two consecutive indicators form a country flag emoji.
 func isRegionalIndicator(r rune) bool {
 	return r >= 0x1F1E6 && r <= 0x1F1FF
+}
+
+// isExtendedPictographic returns true if the rune has the Extended_Pictographic
+// property (Unicode 16.0 emoji-data.txt), meaning it can participate in emoji
+// ZWJ sequences. This covers all emoji ranges used in standard ZWJ sequences.
+//
+// The checks are ordered by frequency of occurrence in real-world emoji usage
+// to minimize branch mispredictions.
+func isExtendedPictographic(r rune) bool {
+	// SMP emoji blocks (U+1F000-U+1FAFF) — covers ~95% of emoji
+	// Includes: Emoticons, Pictographs, Transport, Supplemental Symbols,
+	// Symbols and Pictographs Extended-A, etc.
+	if r >= 0x1F000 && r <= 0x1FAFF {
+		return true
+	}
+
+	// BMP emoji: Misc Symbols (U+2600-U+26FF) and Dingbats (U+2700-U+27BF)
+	if r >= 0x2600 && r <= 0x27BF {
+		return true
+	}
+
+	// BMP emoji: Misc Technical (U+2300-U+23FF)
+	// Includes: ⌚⌛⏩⏪⏫⏬⏰⏳⏸⏹⏺⌨ etc.
+	if r >= 0x2300 && r <= 0x23FF {
+		return true
+	}
+
+	// Misc Symbols and Arrows (U+2B00-U+2BFF)
+	if r >= 0x2B00 && r <= 0x2BFF {
+		return true
+	}
+
+	// Arrow symbols (U+2194-U+21AA)
+	if r >= 0x2194 && r <= 0x21AA {
+		return true
+	}
+
+	// Geometric Shapes (U+25A0-U+25FF)
+	if r >= 0x25A0 && r <= 0x25FF {
+		return true
+	}
+
+	// Symbols for Legacy Computing and extensions (U+1FB00-U+1FFFD)
+	if r >= 0x1FB00 && r <= 0x1FFFD {
+		return true
+	}
+
+	// Individual Extended_Pictographic characters
+	switch r {
+	case 0x00A9, 0x00AE, // © ®
+		0x203C, 0x2049, // ‼ ⁉
+		0x2122, 0x2139, // ™ ℹ
+		0x3030, 0x303D, // 〰 〽
+		0x3297, 0x3299: // ㊗ ㊙
+		return true
+	}
+
+	return false
+}
+
+// isEmojiModifier returns true if the rune is an emoji modifier (skin tone).
+// Emoji modifiers (U+1F3FB-U+1F3FF) represent Fitzpatrick skin types 1-2 through 6.
+// They combine with the preceding Extended_Pictographic character to form
+// a single emoji with a specific skin tone.
+func isEmojiModifier(r rune) bool {
+	return r >= 0x1F3FB && r <= 0x1F3FF
 }
 
 // isASCIIOnly returns true if the string contains only ASCII characters (0x00-0x7F).

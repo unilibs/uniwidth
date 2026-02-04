@@ -112,6 +112,39 @@ func BenchmarkStringWidth_Emoji_Medium(b *testing.B) {
 	}
 }
 
+// ZWJ emoji sequences
+func BenchmarkStringWidth_ZWJ_Family(b *testing.B) {
+	s := "👨\u200D👩\u200D👧\u200D👦" // Family emoji
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = StringWidth(s)
+	}
+}
+
+func BenchmarkStringWidth_ZWJ_CoupleHeart(b *testing.B) {
+	s := "👩\u200D\u2764\uFE0F\u200D👨" // Couple with heart
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = StringWidth(s)
+	}
+}
+
+func BenchmarkStringWidth_EmojiModifier(b *testing.B) {
+	s := "👍🏽" // Thumbs up with skin tone
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = StringWidth(s)
+	}
+}
+
+func BenchmarkStringWidth_ZWJ_Mixed(b *testing.B) {
+	s := "Hello 👨\u200D👩\u200D👧 World 👍🏽 Test 🏳\uFE0F\u200D🌈"
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = StringWidth(s)
+	}
+}
+
 // ============================================================================
 // Benchmark: isASCIIOnly - Fast Path Detection
 // ============================================================================

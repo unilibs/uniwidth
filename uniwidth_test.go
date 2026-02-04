@@ -619,6 +619,326 @@ func TestTableLookup_SpecificCodepoints(t *testing.T) {
 	}
 }
 
+func TestStringWidth_ZWJSequences(t *testing.T) {
+	tests := []struct {
+		name string
+		s    string
+		want int
+	}{
+		// Family ZWJ sequences
+		{
+			name: "Family: man+woman+girl+boy",
+			s:    "👨\u200D👩\u200D👧\u200D👦", // 👨‍👩‍👧‍👦
+			want: 2,
+		},
+		{
+			name: "Family: man+woman+girl",
+			s:    "👨\u200D👩\u200D👧", // 👨‍👩‍👧
+			want: 2,
+		},
+		{
+			name: "Couple with heart",
+			s:    "👩\u200D\u2764\uFE0F\u200D👨", // 👩‍❤️‍👨
+			want: 2,
+		},
+		{
+			name: "Kiss: woman+man",
+			s:    "👩\u200D\u2764\uFE0F\u200D\U0001F48B\u200D👨",
+			want: 2,
+		},
+		// Profession ZWJ sequences
+		{
+			name: "Woman scientist",
+			s:    "👩\u200D🔬", // 👩‍🔬
+			want: 2,
+		},
+		{
+			name: "Man firefighter",
+			s:    "👨\u200D🚒", // 👨‍🚒
+			want: 2,
+		},
+		{
+			name: "Woman technologist",
+			s:    "👩\u200D💻", // 👩‍💻
+			want: 2,
+		},
+		// Gendered ZWJ sequences
+		{
+			name: "Man with probing cane",
+			s:    "👨\u200D🦯", // 👨‍🦯
+			want: 2,
+		},
+		// Heart sequences
+		{
+			name: "Heart on fire",
+			s:    "\u2764\uFE0F\u200D🔥", // ❤️‍🔥
+			want: 2,
+		},
+		{
+			name: "Mending heart",
+			s:    "\u2764\uFE0F\u200D\U0001FA79", // ❤️‍🩹
+			want: 2,
+		},
+		// Rainbow flag
+		{
+			name: "Rainbow flag",
+			s:    "🏳\uFE0F\u200D🌈", // 🏳️‍🌈
+			want: 2,
+		},
+		// Transgender flag
+		{
+			name: "Transgender flag",
+			s:    "🏳\uFE0F\u200D\u26A7\uFE0F", // 🏳️‍⚧️
+			want: 2,
+		},
+		// Pirate flag
+		{
+			name: "Pirate flag",
+			s:    "🏴\u200D\u2620\uFE0F", // 🏴‍☠️
+			want: 2,
+		},
+		// Multiple ZWJ emoji in a string
+		{
+			name: "Multiple ZWJ sequences",
+			s:    "👨\u200D👩\u200D👧 and 👩\u200D💻",
+			want: 9, // family(2) + " and "(5) + technologist(2)
+		},
+		// ZWJ in mixed content
+		{
+			name: "Mixed: ASCII + ZWJ family",
+			s:    "Family: 👨\u200D👩\u200D👧\u200D👦!",
+			want: 11, // "Family: "(8) + family(2) + "!"(1)
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := StringWidth(tt.s)
+			if got != tt.want {
+				t.Errorf("StringWidth(%q) = %d, want %d", tt.s, got, tt.want)
+				t.Logf("Runes: %U", []rune(tt.s))
+			}
+		})
+	}
+}
+
+func TestStringWidth_EmojiModifiers(t *testing.T) {
+	tests := []struct {
+		name string
+		s    string
+		want int
+	}{
+		// Skin tone modifiers
+		{
+			name: "Thumbs up + light skin",
+			s:    "👍🏻", // U+1F44D + U+1F3FB
+			want: 2,
+		},
+		{
+			name: "Thumbs up + medium skin",
+			s:    "👍🏽", // U+1F44D + U+1F3FD
+			want: 2,
+		},
+		{
+			name: "Thumbs up + dark skin",
+			s:    "👍🏿", // U+1F44D + U+1F3FF
+			want: 2,
+		},
+		{
+			name: "Wave + medium-light skin",
+			s:    "👋🏼", // U+1F44B + U+1F3FC
+			want: 2,
+		},
+		// Skin tone + ZWJ (profession with skin tone)
+		{
+			name: "Woman scientist medium skin",
+			s:    "👩🏽\u200D🔬", // 👩🏽‍🔬
+			want: 2,
+		},
+		{
+			name: "Man firefighter dark skin",
+			s:    "👨🏿\u200D🚒", // 👨🏿‍🚒
+			want: 2,
+		},
+		// Multiple modified emoji
+		{
+			name: "Two skin-toned emoji",
+			s:    "👍🏻👋🏿",
+			want: 4, // 2 + 2
+		},
+		// Modified emoji in mixed text
+		{
+			name: "Mixed text with modified emoji",
+			s:    "Hi 👍🏽!",
+			want: 6, // H(1)+i(1)+space(1)+thumbs(2)+!(1)
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := StringWidth(tt.s)
+			if got != tt.want {
+				t.Errorf("StringWidth(%q) = %d, want %d", tt.s, got, tt.want)
+				t.Logf("Runes: %U", []rune(tt.s))
+			}
+		})
+	}
+}
+
+func TestStringWidth_ZWJEdgeCases(t *testing.T) {
+	tests := []struct {
+		name string
+		s    string
+		want int
+	}{
+		// Standalone ZWJ
+		{
+			name: "Standalone ZWJ",
+			s:    "\u200D",
+			want: 0,
+		},
+		// ZWJ between non-emoji characters
+		{
+			name: "ZWJ between ASCII",
+			s:    "a\u200Db",
+			want: 2, // a(1) + ZWJ(0) + b(1)
+		},
+		// Emoji + ZWJ + non-emoji (invalid ZWJ sequence)
+		{
+			name: "Emoji + ZWJ + ASCII",
+			s:    "😀\u200Da",
+			want: 3, // emoji(2) + ZWJ(0) + a(1)
+		},
+		// Multiple ZWJs without emoji
+		{
+			name: "Multiple standalone ZWJs",
+			s:    "\u200D\u200D\u200D",
+			want: 0,
+		},
+		// Emoji without ZWJ (should be normal)
+		{
+			name: "Two emoji without ZWJ",
+			s:    "😀🚀",
+			want: 4, // 2 + 2
+		},
+		// Single emoji modifier without base
+		{
+			name: "Orphan skin tone modifier",
+			s:    "🏽", // U+1F3FD alone
+			want: 2,  // Not preceded by EP, so normal width
+		},
+		// ZWJ at string boundaries
+		{
+			name: "Leading ZWJ + emoji",
+			s:    "\u200D😀",
+			want: 2, // ZWJ(0) + emoji(2)
+		},
+		{
+			name: "Emoji + trailing ZWJ",
+			s:    "😀\u200D",
+			want: 2, // emoji(2) + ZWJ(0)
+		},
+		// Very long ZWJ chain
+		{
+			name: "Long ZWJ chain (3 joins)",
+			s:    "👨\u200D👩\u200D👧\u200D👦",
+			want: 2,
+		},
+		// ZWJ sequence followed by regular emoji
+		{
+			name: "ZWJ family + regular emoji",
+			s:    "👨\u200D👩\u200D👧🚀",
+			want: 4, // family(2) + rocket(2)
+		},
+		// Keycap sequences (should still work)
+		{
+			name: "Keycap 1",
+			s:    "1\uFE0F\u20E3",
+			want: 2, // 1+VS16 → width 2, combining keycap → width 0
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := StringWidth(tt.s)
+			if got != tt.want {
+				t.Errorf("StringWidth(%q) = %d, want %d", tt.s, got, tt.want)
+				t.Logf("Runes: %U", []rune(tt.s))
+			}
+		})
+	}
+}
+
+func TestIsExtendedPictographic(t *testing.T) {
+	tests := []struct {
+		name string
+		r    rune
+		want bool
+	}{
+		// SMP emoji
+		{"Grinning face", 0x1F600, true},
+		{"Rocket", 0x1F680, true},
+		{"Thumbs up", 0x1F44D, true},
+		{"Woman", 0x1F469, true},
+		{"Man", 0x1F468, true},
+		{"Microscope", 0x1F52C, true},
+
+		// BMP emoji
+		{"Sun", 0x2600, true},
+		{"Heart", 0x2764, true},
+		{"Scissors", 0x2702, true},
+		{"Watch", 0x231A, true},
+
+		// Individual EP characters
+		{"Copyright", 0x00A9, true},
+		{"Registered", 0x00AE, true},
+		{"Trademark", 0x2122, true},
+
+		// Non-EP characters
+		{"ASCII a", 'a', false},
+		{"CJK ideograph", 0x4E00, false},
+		{"Hangul", 0xAC00, false},
+		{"Latin extended", 0x00E9, false},
+		{"Combining mark", 0x0300, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := isExtendedPictographic(tt.r)
+			if got != tt.want {
+				t.Errorf("isExtendedPictographic(%U) = %v, want %v", tt.r, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestIsEmojiModifier(t *testing.T) {
+	tests := []struct {
+		name string
+		r    rune
+		want bool
+	}{
+		{"Light skin tone", 0x1F3FB, true},
+		{"Medium-light", 0x1F3FC, true},
+		{"Medium", 0x1F3FD, true},
+		{"Medium-dark", 0x1F3FE, true},
+		{"Dark skin tone", 0x1F3FF, true},
+		{"Before range", 0x1F3FA, false},
+		{"After range", 0x1F400, false},
+		{"Regular emoji", 0x1F600, false},
+		{"ASCII", 'a', false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := isEmojiModifier(tt.r)
+			if got != tt.want {
+				t.Errorf("isEmojiModifier(%U) = %v, want %v", tt.r, got, tt.want)
+			}
+		})
+	}
+}
+
 // TestRuneWidth_UncommonRanges tests coverage for less common Unicode ranges
 func TestRuneWidth_UncommonRanges(t *testing.T) {
 	tests := []struct {
