@@ -8,11 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Planned
+- Non-ASCII StringWidth path optimization (reduce ZWJ overhead for non-emoji)
 - Profile-Guided Optimization (PGO) support
-- Unicode 17.0 preparation
-- Benchmark CI for regression detection
+- Unicode 17.0 tables
 - Explicit SIMD via Go assembly and `archsimd` (Go 1.26+)
-- API stability review based on community feedback
+
+### Added
+- **100% test coverage**: Exhaustive branch coverage for `isExtendedPictographic()` (all Unicode ranges) and `asciiWidth()` (SWAR fast/slow paths, control chars at every byte offset).
+- **Benchmark CI**: Automated regression detection (benchstat) and three-way library comparison table in PR comments.
 
 ## [0.2.0] - 2026-02-05
 
@@ -32,7 +35,7 @@ Major performance and emoji correctness release. All four lookup tiers are now O
 - **ASCII detection**: SWAR `isASCIIOnly()` processes 8 bytes/iter via uint64 word with `0x8080808080808080` mask. No unsafe pointer escapes.
 - **ASCII width counting**: SWAR `asciiWidth()` uses Daniel Lemire's underflow trick for control character detection in 8-byte chunks.
 - **Short string optimization**: Strings < 8 bytes use a fused single-pass loop that combines ASCII check and width counting, avoiding SWAR function call overhead.
-- **Test coverage**: 87.1% → 96.4% (+9.3%).
+- **Test coverage**: 87.1% → 100% (library package).
 
 ### Performance
 - **ASCII**: 3-46x faster than go-runewidth (SWAR fast paths)

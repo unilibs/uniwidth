@@ -240,7 +240,7 @@ go test -bench=. -benchmem
 go test -cover
 ```
 
-Current test coverage: **96.4%**
+Current test coverage: **100%** (library package)
 
 ## Development Status
 
@@ -253,13 +253,14 @@ Current test coverage: **96.4%**
 - SWAR ASCII optimization (8 bytes/iter)
 - ZWJ emoji state machine (👨‍👩‍👧‍👦 = width 2)
 - Emoji modifier support (👍🏽 = width 2)
-- 96.4% test coverage
+- 100% test coverage (library package)
+- Automated benchmark CI (regression detection + library comparison)
 
 **Roadmap** (v0.3.0+):
+- Non-ASCII StringWidth path optimization
 - Profile-Guided Optimization (PGO)
-- Benchmark CI for regression detection
 - Explicit SIMD via Go assembly and `archsimd`
-- Unicode 17.0 preparation
+- Unicode 17.0 tables
 
 ## Contributing
 
