@@ -523,7 +523,7 @@ func asciiWidth(s string) int {
 //
 // Performance: O(1), 0 allocations. Three array lookups + bit extraction.
 func tableLookupWidth(r rune) int {
-	cp := uint32(r)
+	cp := uint32(r) //nolint:gosec // G115: rune is int32; valid Unicode codepoints (0–0x10FFFF) are always non-negative
 	rootIdx := widthRoot[cp>>13]
 	midIdx := widthMiddle[rootIdx][cp>>7&0x3F]
 	packed := widthLeaves[midIdx][cp>>2&0x1F]
