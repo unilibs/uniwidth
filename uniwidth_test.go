@@ -968,3 +968,202 @@ func TestRuneWidth_UncommonRanges(t *testing.T) {
 		})
 	}
 }
+
+// =============================================================================
+// isExtendedPictographic — exhaustive branch coverage for all Unicode ranges
+// =============================================================================
+
+func TestIsExtendedPictographic_AllRanges(t *testing.T) {
+	tests := []struct {
+		name string
+		r    rune
+		want bool
+	}{
+		// Range: Misc Symbols and Arrows (U+2B00-U+2BFF)
+		{"Misc Symbols/Arrows start U+2B00", 0x2B00, true},
+		{"Up arrow U+2B06", 0x2B06, true},
+		{"Star U+2B50", 0x2B50, true},
+		{"Misc Symbols/Arrows end U+2BFF", 0x2BFF, true},
+		{"Below Misc Symbols/Arrows U+2AFF", 0x2AFF, false},
+
+		// Range: Arrow symbols (U+2194-U+21AA)
+		{"Left-right arrow U+2194", 0x2194, true},
+		{"Rightwards arrow with hook U+21AA", 0x21AA, true},
+		{"Mid arrow range U+219E", 0x219E, true},
+		{"Below arrow range U+2193", 0x2193, false},
+
+		// Range: Geometric Shapes (U+25A0-U+25FF)
+		{"Black square U+25A0", 0x25A0, true},
+		{"White circle U+25CB", 0x25CB, true},
+		{"Geometric end U+25FF", 0x25FF, true},
+		{"Below geometric range U+259F", 0x259F, false},
+
+		// Range: Legacy Computing (U+1FB00-U+1FFFD)
+		{"Legacy Computing start U+1FB00", 0x1FB00, true},
+		{"Legacy Computing mid U+1FC00", 0x1FC00, true},
+		{"Legacy Computing end U+1FFFD", 0x1FFFD, true},
+		{"Above legacy range U+1FFFE", 0x1FFFE, false},
+
+		// Verify existing ranges still work
+		{"SMP emoji start U+1F000", 0x1F000, true},
+		{"SMP emoji end U+1FAFF", 0x1FAFF, true},
+		{"Misc Symbols start U+2600", 0x2600, true},
+		{"Dingbats end U+27BF", 0x27BF, true},
+		{"Misc Technical start U+2300", 0x2300, true},
+		{"Misc Technical end U+23FF", 0x23FF, true},
+
+		// Individual EP characters (switch statement)
+		{"Double exclamation U+203C", 0x203C, true},
+		{"Exclamation question U+2049", 0x2049, true},
+		{"Info source U+2139", 0x2139, true},
+		{"Wavy dash U+3030", 0x3030, true},
+		{"Part alternation U+303D", 0x303D, true},
+		{"Circled congratulation U+3297", 0x3297, true},
+		{"Circled secret U+3299", 0x3299, true},
+
+		// Negatives: characters in gaps between EP ranges
+		{"After arrow, before misc tech U+21AB", 0x21AB, false},
+		{"Control Pictures block U+2400", 0x2400, false},
+		{"Box Drawing block U+2500", 0x2500, false},
+		{"After dingbats U+27C0", 0x27C0, false},
+		{"BMP high U+FFFF", 0xFFFF, false},
+		{"Regular Latin", 'Z', false},
+		{"Null character", 0x0000, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := isExtendedPictographic(tt.r)
+			if got != tt.want {
+				t.Errorf("isExtendedPictographic(%U) = %v, want %v", tt.r, got, tt.want)
+			}
+		})
+	}
+}
+
+// =============================================================================
+// asciiWidth — direct unit tests for SWAR control character detection
+// =============================================================================
+
+func TestAsciiWidth(t *testing.T) {
+	tests := []struct {
+		name string
+		s    string
+		want int
+	}{
+		// Empty string (n == 0 early return)
+		{"empty string", "", 0},
+
+		// Short strings (< 8 bytes, scalar tail only)
+		{"single printable", "A", 1},
+		{"7 printable chars", "abcdefg", 7},
+
+		// Exactly 8 bytes (one SWAR chunk, no tail)
+		{"8 printable chars", "abcdefgh", 8},
+		{"8 spaces (0x20 boundary)", "        ", 8},
+		{"8 tilde (0x7E boundary)", "~~~~~~~~", 8},
+
+		// Longer strings (multiple SWAR chunks + tail)
+		{"16 chars (2 chunks)", "0123456789abcdef", 16},
+		{"17 chars (2 chunks + 1 tail)", "0123456789abcdefg", 17},
+		{"24 chars (3 chunks)", "abcdefghijklmnopqrstuvwx", 24},
+
+		// SWAR slow path: control character forces byte-by-byte fallback
+		{"null in 8-byte chunk", "abcd\x00efg", 7},
+		{"tab in 8-byte chunk", "abcdefg\t", 7},
+		{"mixed CR/LF in chunk", "abc\ndef\rg", 7},
+		{"DEL (0x7F) in chunk", "abcdefg\x7F", 7},
+		{"BEL (0x07) in chunk", "abc\x07defg", 7},
+		{"multiple controls in chunk", "\t\n\r\x00ABCD", 4},
+		{"all control chars in chunk", "\x00\x01\x02\x03\x04\x05\x06\x07", 0},
+
+		// Mixed fast path + slow path across chunks
+		{"ctrl first chunk, clean second", "\x01bcdefghijklmnop", 15},
+		{"clean first chunk, ctrl second", "abcdefgh\x00jklmnop", 15},
+		{"ctrl in both chunks", "\x01bcdefgh\x02jklmnop", 14},
+
+		// Scalar tail with control characters
+		{"9 chars with tab at tail", "abcdefgh\t", 8},
+		{"10 chars with null at tail", "abcdefghi\x00", 9},
+		{"15 chars with DEL at tail", "abcdefghijklmn\x7F", 14},
+
+		// Printable boundary: 0x1F is control, 0x20 is printable
+		{"unit separator 0x1F in chunk", "abcdefg\x1F", 7},
+		{"space 0x20 in chunk", "abcdefg ", 8},
+
+		// Realistic TUI content (8+ bytes ASCII with mixed content)
+		{"terminal prompt", "user@host:~$ ", 13},
+		{"table separator", "+--------+--------+", 19},
+		{"progress bar", "[=====>          ]", 18},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := asciiWidth(tt.s)
+			if got != tt.want {
+				t.Errorf("asciiWidth(%q) = %d, want %d", tt.s, got, tt.want)
+			}
+		})
+	}
+}
+
+// TestAsciiWidth_SWARControlAtEveryPosition exercises the SWAR slow path
+// with a control character placed at each byte offset within an 8-byte chunk,
+// ensuring correct byte-by-byte fallback regardless of position.
+func TestAsciiWidth_SWARControlAtEveryPosition(t *testing.T) {
+	// SOH (0x01) at each position in an 8-byte chunk
+	for pos := 0; pos < 8; pos++ {
+		s := []byte("ABCDEFGH")
+		s[pos] = 0x01
+		t.Run("soh_at_"+string(rune('0'+pos)), func(t *testing.T) {
+			got := asciiWidth(string(s))
+			if got != 7 {
+				t.Errorf("asciiWidth(%q) = %d, want 7 (SOH at pos %d)", s, got, pos)
+			}
+		})
+	}
+
+	// DEL (0x7F) at each position in an 8-byte chunk
+	for pos := 0; pos < 8; pos++ {
+		s := []byte("ABCDEFGH")
+		s[pos] = 0x7F
+		t.Run("del_at_"+string(rune('0'+pos)), func(t *testing.T) {
+			got := asciiWidth(string(s))
+			if got != 7 {
+				t.Errorf("asciiWidth(%q) = %d, want 7 (DEL at pos %d)", s, got, pos)
+			}
+		})
+	}
+}
+
+// TestStringWidth_ASCIIControlMix verifies that StringWidth correctly delegates
+// to asciiWidth for long ASCII strings with embedded control characters.
+func TestStringWidth_ASCIIControlMix(t *testing.T) {
+	tests := []struct {
+		name string
+		s    string
+		want int
+	}{
+		// 8+ byte ASCII strings that hit the isASCIIOnly→asciiWidth path
+		{"16 printable", "Hello, World!!! ", 16},
+		{"tab in long string", "Hello\tWorld!!!", 13},
+		{"newline in long string", "Hello\nWorld!!!", 13},
+		{"DEL in long string", "Hello\x7FWorld!!!", 13},
+		{"multiple newlines", "line1\nline2\nline3\n", 15},
+		{"null bytes scattered", "abc\x00defg\x00ijklmnop", 15},
+		{"TUI box drawing ASCII", "+----------+----------+", 23},
+
+		// Boundary: exactly 8 bytes
+		{"8 bytes all printable", "12345678", 8},
+		{"8 bytes with tab", "1234567\t", 7},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := StringWidth(tt.s)
+			if got != tt.want {
+				t.Errorf("StringWidth(%q) = %d, want %d", tt.s, got, tt.want)
+			}
+		})
+	}
+}
