@@ -293,3 +293,14 @@ Part of the **unilibs** ecosystem:
 ---
 
 **Made with care by the Phoenix team** | **Powered by Go 1.25+**
+
+
+## Star History
+
+<a href="https://starhistory.io">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.starhistory.io/png?repos=unilibs/uniwidth&style=dark" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.starhistory.io/png?repos=unilibs/uniwidth&style=professional" />
+   <img alt="Star History Chart" src="https://api.starhistory.io/png?repos=unilibs/uniwidth" width="800" />
+ </picture>
+</a>
